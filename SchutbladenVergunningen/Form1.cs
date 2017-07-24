@@ -2,13 +2,14 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Windows.Forms;
 using LinqToExcel;
 using LinqToExcel.Extensions;
 using Microsoft.Office.Interop.Outlook;
 using Microsoft.Office.Interop.Word;
-using System = Microsoft.Office.Interop.Word.System;
 using Windows = Microsoft.Office.Interop.Word.Windows;
 
 namespace SchutbladenVergunningen
@@ -26,7 +27,7 @@ namespace SchutbladenVergunningen
             var excel = new ExcelQueryFactory("D:\\Users\\alfredo\\Google\\VolleyKrukenburg\\leden 2017-2.xls");
             excel.AddMapping<Lid>(x => x.Naam, "Naam");
             excel.AddMapping<Lid>(x => x.Adres, "Adres");
-            excel.AddMapping<Lid>(x => x.Gemeente, "Gemeente");
+            excel.AddMapping<Lid>(x => x.Gemeente, "Postn + Gem#");
             excel.AddMapping<Lid>(x => x.Ploeg, "Ploeg");
             excel.AddMapping<Lid>(x => x.Geb, "Geb", s =>
             {
@@ -83,22 +84,80 @@ namespace SchutbladenVergunningen
             foreach (var ploeg in lijstPerPloeg.Keys.OrderBy(x => x))
             {
                 var distList = outlook.CreateItem(
-                        OlItemType.olDistributionListItem)
-                    as DistListItem;
+                        OlItemType.olDistributionListItem)as DistListItem;
                 distList.Subject = "2017-" + ploeg;
+                var contacts = new List<ContactItem>();
                 foreach (var lid in lijstPerPloeg[ploeg])
                 {
-                   
-                    Recipient recip =
-                        outlook.Session.CreateRecipient(lid.Email);
-                    var acc = recip.PropertyAccessor;
-                    //Resolve the Recipient before calling AddMember
-                    recip.Resolve();
-                    distList.AddMember(recip);
+                    if (string.IsNullOrEmpty(lid.Email))
+                    {
+                        this.textBox1.AppendText("Geen email voor " + lid.Naam);
+                        continue;
+                    }
+                    var contact = outlook.CreateItem(
+                        OlItemType.olContactItem) as ContactItem;
+                    //Recipient recip =
+                    //    outlook.Session.CreateRecipient(lid.Naam);
+                    var pre = lid.Email.Replace(" - ", "|");
+                    var splitted = pre.Split('|');
+                    foreach (var email in splitted)
+                    {
+                       var email2 = email.Trim().Replace(",",".");
+                        try
+                        {
+                            var address= new System.Net.Mail.MailAddress(email2);
+                        }
+                        catch (System.Exception e)
+                        {
+                            this.textBox1.AppendText("invalid email"+ email2);
+                            goto done;
+                        }
+                        if (lid.Geb.HasValue)
+                        {
+                            contact.Birthday = lid.Geb.Value;
+                        }
+                        contact.FullName = "2017-" + lid.Naam;
+                        contact.NickName = "2017-" + lid.Naam;
+                        contact.Email1Address = email2;
+                        contact.BusinessAddress = lid.Adres;
+                        contact.BusinessAddressCity = lid.Gemeente;
+                        contact.HomeTelephoneNumber = lid.Telefoonnummers;
+                        contact.Hobby = "Volleybal";
+                        contact.Body = lid.Ploeg;
+                        //contact.Display(true);
+
+                        //Resolve the Recipient before calling AddMember//
+                        contact.Save();
+                        Recipient recip =
+                            outlook.Session.CreateRecipient(contact.Email1Address);
+                        var result = recip.Resolve();
+                        Debug.Assert(result);
+                        distList.AddMember(recip);
+                        contacts.Add(contact);
+                        done:
+                        ;
+                    }
                 }
                 distList.Save();
-                distList.SaveAs("d:\\"+ ploeg+"2017.msg");
+                //distList.Display(true);
+                var path = "d:\\"+ ploeg+"2017.msg";
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+                distList.SaveAs(path);
                 distList.Delete();
+                foreach (var contact in contacts)
+                {
+                    try
+                    {
+                        contact.Delete();
+                    }
+                    catch (System.Exception e)
+                    {
+                        this.textBox1.AppendText("Failed:");
+                    }
+                }
             }
         }
 
