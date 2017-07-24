@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
@@ -35,8 +36,15 @@ namespace SchutbladenVergunningen
             excel.AddMapping<Lid>(x => x.Nat, "Nat");
             excel.AddMapping<Lid>(x => x.Gesl, "Gesl");
             excel.AddMapping<Lid>(x => x.Email, "E-mail");
-            excel.AddMapping<Lid>(x => x.Telefoonnummers, "Telefoon");
+            excel.AddMapping<Lid>(x => x.Telefoonnummers, "Telefoonnr#", s =>
+            {
+                return s;
+            });
             excel.AddMapping<Lid>(x => x.Licentie, "licentie");
+            foreach (var field in excel.GetColumnNames("Blad1"))
+            {
+                Debug.WriteLine(field);
+            }
             var leden = from c in excel.Worksheet<Lid>("Blad1") select c;
 
             // We lopen over alle leden en steken ze in een lijst per ploeg
@@ -68,7 +76,7 @@ namespace SchutbladenVergunningen
                 Paragraph par = null;
                 if (!first)
                 {
-                    doc.Paragraphs.Add();
+                    par=doc.Paragraphs.Add();
                     par.Range.InsertBreak(WdBreakType.wdPageBreak);
                 }
                 first = false;
