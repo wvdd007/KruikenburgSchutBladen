@@ -5,6 +5,8 @@ using System.Globalization;
 using System.Linq;
 using System.Windows.Forms;
 using LinqToExcel;
+using LinqToExcel.Extensions;
+using Microsoft.Office.Interop.Outlook;
 using Microsoft.Office.Interop.Word;
 using System = Microsoft.Office.Interop.Word.System;
 using Windows = Microsoft.Office.Interop.Word.Windows;
@@ -65,18 +67,52 @@ namespace SchutbladenVergunningen
                     }
                 }
 
-           
+            CreateOutlookGroups(lijstPerPloeg);
 
+            CreateWordDocument(lijstPerPloeg);
+
+
+            this.Close();
+        }
+
+        private void CreateOutlookGroups(Dictionary<string, List<Lid>> lijstPerPloeg)
+        {
+            const string PR_SMTP_ADDRESS =
+                "http://schemas.microsoft.com/mapi/proptag/0x39FE001E";
+            var outlook = new Microsoft.Office.Interop.Outlook.Application();
+            foreach (var ploeg in lijstPerPloeg.Keys.OrderBy(x => x))
+            {
+                var distList = outlook.CreateItem(
+                        OlItemType.olDistributionListItem)
+                    as DistListItem;
+                distList.Subject = "2017-" + ploeg;
+                foreach (var lid in lijstPerPloeg[ploeg])
+                {
+                   
+                    Recipient recip =
+                        outlook.Session.CreateRecipient(lid.Email);
+                    var acc = recip.PropertyAccessor;
+                    //Resolve the Recipient before calling AddMember
+                    recip.Resolve();
+                    distList.AddMember(recip);
+                }
+                distList.Save();
+                distList.SaveAs("d:\\"+ ploeg+"2017.msg");
+                distList.Delete();
+            }
+        }
+
+        private void CreateWordDocument(Dictionary<string, List<Lid>> lijstPerPloeg)
+        {
             var doc = new Document();
             var first = true;
             doc.PageSetup.Orientation = WdOrientation.wdOrientLandscape;
             foreach (var ploeg in lijstPerPloeg.Keys.OrderBy(x => x))
             {
-
                 Paragraph par = null;
                 if (!first)
                 {
-                    par=doc.Paragraphs.Add();
+                    par = doc.Paragraphs.Add();
                     par.Range.InsertBreak(WdBreakType.wdPageBreak);
                 }
                 first = false;
@@ -84,13 +120,13 @@ namespace SchutbladenVergunningen
                 textBox1.AppendText($"Ploeg : {ploeg}\n");
                 par = doc.Paragraphs.Add();
                 par.set_Style(WdBuiltinStyle.wdStyleHeading1);
-                par.Range.Text =($"Ploeg : {ploeg}\n");
+                par.Range.Text = ($"Ploeg : {ploeg}\n");
 
                 par = doc.Paragraphs.Add();
-                par.set_Style(WdBuiltinStyle.wdStyleHeading2); 
+                par.set_Style(WdBuiltinStyle.wdStyleHeading2);
                 var start = par.Range.Start;
 
-                par.Range.Text=
+                par.Range.Text =
                     $"Naam\tGeboortejaar\tLicentienummer\tEmail\tTelefoonnummers\n";
                 var count = 0;
                 foreach (var lid in lijstPerPloeg[ploeg].OrderBy(x => x.Naam))
@@ -101,22 +137,21 @@ namespace SchutbladenVergunningen
                     par = doc.Paragraphs.Add();
                     par.set_Style(WdBuiltinStyle.wdStyleNormal);
 
-                    par.Range.Text=
+                    par.Range.Text =
                         $"{lid.Naam}\t{lid.Geb?.Year}\t{lid.Licentie}\t{lid.Email}\t{lid.Telefoonnummers}\n";
                     count++;
                 }
-                for(var rest=count ;rest<=20;rest++)
+                for (var rest = count; rest <= 20; rest++)
                 {
-                   
                     par = doc.Paragraphs.Add();
                     par.set_Style(WdBuiltinStyle.wdStyleNormal);
 
-                    par.Range.Text=
+                    par.Range.Text =
                         $"\t\t\t\t\n";
                     count++;
                 }
                 var end = par.Range.End;
-                var table= doc.Range(start, end).ConvertToTable();
+                var table = doc.Range(start, end).ConvertToTable();
                 table.ApplyStyleRowBands = true;
                 table.ApplyStyleFirstColumn = false;
                 table.ApplyStyleColumnBands = false;
@@ -127,7 +162,6 @@ namespace SchutbladenVergunningen
             }
             doc.SaveAs($@"d:\doc{DateTime.Now.Ticks}.docx");
             doc.Close();
-            this.Close();
         }
     }
 }
