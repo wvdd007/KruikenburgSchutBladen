@@ -24,8 +24,16 @@ namespace SchutbladenVergunningen
         private void button1_Click(object sender, EventArgs e)
         {
             // query naar excel sheet
-            var excel = new ExcelQueryFactory("D:\\Users\\alfredo\\Google\\VolleyKrukenburg\\leden 2017-2.xls");
+            var excel = new ExcelQueryFactory("D:\\Leden 2017-2 willy.xls");
             excel.AddMapping<Lid>(x => x.Naam, "Naam");
+            excel.AddMapping<Lid>(x => x.RugNummer, "Nr", s =>
+                {
+                    int result;
+                    if (int.TryParse(s, out result))
+                        return result;
+                    return null;
+                }
+            );
             excel.AddMapping<Lid>(x => x.Adres, "Adres");
             excel.AddMapping<Lid>(x => x.Gemeente, "Postn + Gem#");
             excel.AddMapping<Lid>(x => x.Ploeg, "Ploeg");
@@ -68,7 +76,7 @@ namespace SchutbladenVergunningen
                     }
                 }
 
-            CreateOutlookGroups(lijstPerPloeg);
+            //CreateOutlookGroups(lijstPerPloeg);
 
             CreateWordDocument(lijstPerPloeg);
 
@@ -186,18 +194,20 @@ namespace SchutbladenVergunningen
                 var start = par.Range.Start;
 
                 par.Range.Text =
-                    $"Naam\tGeboortejaar\tLicentienummer\tEmail\tTelefoonnummers\n";
+                    $"Nr\tLicentienummer\tNaam\tGeboortejaar\tEmail\tTelefoonnummers\n";
                 var count = 0;
-                foreach (var lid in lijstPerPloeg[ploeg].OrderBy(x => x.Naam))
+                foreach (var lid in lijstPerPloeg[ploeg]
+                    .OrderBy(x => x.RugNummer)
+                    .ThenBy(x => x.Naam))
                 {
                     textBox1.AppendText(
-                        $"  Lid : {lid.Naam} - {lid.Geb?.Year} - {lid.Licentie} - {lid.Email} - {lid.Telefoonnummers}\n");
+                        $"  Lid : {lid.RugNummerTekst} - {lid.Naam} - {lid.Geb?.Year} - {lid.Licentie} - {lid.Email} - {lid.Telefoonnummers}\n");
                     this.Text = $"{lid.Naam}-{lid.Email}";
                     par = doc.Paragraphs.Add();
                     par.set_Style(WdBuiltinStyle.wdStyleNormal);
 
                     par.Range.Text =
-                        $"{lid.Naam}\t{lid.Geb?.Year}\t{lid.Licentie}\t{lid.Email}\t{lid.Telefoonnummers}\n";
+                        $"{lid.RugNummerTekst}\t{lid.Licentie}\t{lid.Naam}\t{lid.Geb?.Year}\t{lid.Email}\t{lid.Telefoonnummers}\n";
                     count++;
                 }
                 for (var rest = count; rest <= 20; rest++)
@@ -206,7 +216,7 @@ namespace SchutbladenVergunningen
                     par.set_Style(WdBuiltinStyle.wdStyleNormal);
 
                     par.Range.Text =
-                        $"\t\t\t\t\n";
+                        $"\t\t\t\t\t\n";
                     count++;
                 }
                 var end = par.Range.End;

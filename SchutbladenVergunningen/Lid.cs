@@ -18,5 +18,18 @@ namespace SchutbladenVergunningen
         public string Email { get; set; }
         public string Telefoonnummers { get; set; }
         public string Licentie { get; set; }
+
+        public int? RugNummer { get; set; }
+        public string RugNummerTekst
+        {
+            get
+            {
+                if (RugNummer.HasValue)
+                {
+                    return RugNummer.Value.ToString();
+                }
+                return "";
+            }
+        }
     }
 }
