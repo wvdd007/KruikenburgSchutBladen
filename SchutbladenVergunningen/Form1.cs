@@ -24,7 +24,78 @@ namespace SchutbladenVergunningen
         private void button1_Click(object sender, EventArgs e)
         {
             // query naar excel sheet
-            var excel = new ExcelQueryFactory("D:\\Leden 2017-2 willy.xls");
+            List<Lid> leden;
+            using (var excel = new ExcelQueryFactory("D:\\Leden 2017-2 willy.xls"))
+            {
+                leden = LeesLeden(excel).ToList();
+            }
+
+            List<Coach> coaches;
+            using (var excel = new ExcelQueryFactory("D:\\Leden 2017-2 willy.xls"))
+            {
+                coaches = LeesCoaches(excel).ToList();
+            }
+
+            // We lopen over alle leden en steken ze in een lijst per ploeg
+            var lijstPerPloeg = new Dictionary<string, List<Lid>>();
+            foreach (var lid in leden)
+                if (lid.Ploeg != null)
+                {
+                    var ploegen = lid.Ploeg.Split('-');
+                    foreach (var ploeg in ploegen)
+                    {
+                        List<Lid> ploegLeden;
+                        if (!lijstPerPloeg.TryGetValue(ploeg, out ploegLeden))
+                        {
+                            ploegLeden = new List<Lid>();
+                            lijstPerPloeg[ploeg] = ploegLeden;
+                        }
+                        ploegLeden.Add(lid);
+                    }
+                }
+
+            // We lopen over alle coaches en steken ze in een lijst per ploeg
+            var coachPerPloeg = new Dictionary<string, List<Coach>>();
+            foreach (var coach in coaches)
+                if (coach.Ploeg != null)
+                {
+                    var ploegen = coach.Ploeg.Split('-');
+                    foreach (var ploeg in ploegen)
+                    {
+                        List<Coach> ploegCoaches;
+                        if (!coachPerPloeg.TryGetValue(ploeg, out ploegCoaches))
+                        {
+                            ploegCoaches = new List<Coach>();
+                            coachPerPloeg[ploeg] = ploegCoaches;
+                        }
+                        ploegCoaches.Add(coach);
+                    }
+                }
+
+            //CreateOutlookGroups(lijstPerPloeg);
+
+            CreateWordDocument(lijstPerPloeg, coachPerPloeg);
+
+
+            this.Close();
+        }
+
+        private static IQueryable<Coach> LeesCoaches(ExcelQueryFactory excel)
+        {
+            excel.AddMapping<Coach>(x => x.Naam, "NAAM VOORNAAM");
+            excel.AddMapping<Coach>(x => x.Ploeg, "coach - begeleider");
+            excel.AddMapping<Coach>(x => x.Email, "E-mail");
+            excel.AddMapping<Coach>(x => x.Telefoonnummers, "Telefoonnr#", s => { return s; });
+            excel.AddMapping<Coach>(x => x.Licentie, "licentie");
+            foreach (var field in excel.GetColumnNames("Blad4"))
+            {
+                Debug.WriteLine(field);
+            }
+            var coaches = from c in excel.Worksheet<Coach>("Blad4") select c;
+            return coaches;
+        }
+        private static IQueryable<Lid> LeesLeden(ExcelQueryFactory excel)
+        {
             excel.AddMapping<Lid>(x => x.Naam, "Naam");
             excel.AddMapping<Lid>(x => x.RugNummer, "Nr", s =>
                 {
@@ -47,41 +118,14 @@ namespace SchutbladenVergunningen
             excel.AddMapping<Lid>(x => x.Nat, "Nat");
             excel.AddMapping<Lid>(x => x.Gesl, "Gesl");
             excel.AddMapping<Lid>(x => x.Email, "E-mail");
-            excel.AddMapping<Lid>(x => x.Telefoonnummers, "Telefoonnr#", s =>
-            {
-                return s;
-            });
+            excel.AddMapping<Lid>(x => x.Telefoonnummers, "Telefoonnr#", s => { return s; });
             excel.AddMapping<Lid>(x => x.Licentie, "licentie");
             foreach (var field in excel.GetColumnNames("Blad1"))
             {
                 Debug.WriteLine(field);
             }
             var leden = from c in excel.Worksheet<Lid>("Blad1") select c;
-
-            // We lopen over alle leden en steken ze in een lijst per ploeg
-            var lijstPerPloeg = new Dictionary<string, List<Lid>>();
-            foreach (var lid in leden)
-                if (lid.Ploeg != null)
-                {
-                    var ploegen = lid.Ploeg.Split('-');
-                    foreach (var ploeg in ploegen)
-                    {
-                        List<Lid> ploegLeden;
-                        if (!lijstPerPloeg.TryGetValue(ploeg, out ploegLeden))
-                        {
-                            ploegLeden = new List<Lid>();
-                            lijstPerPloeg[ploeg] = ploegLeden;
-                        }
-                        ploegLeden.Add(lid);
-                    }
-                }
-
-            //CreateOutlookGroups(lijstPerPloeg);
-
-            CreateWordDocument(lijstPerPloeg);
-
-
-            this.Close();
+            return leden;
         }
 
         private void CreateOutlookGroups(Dictionary<string, List<Lid>> lijstPerPloeg)
@@ -169,9 +213,10 @@ namespace SchutbladenVergunningen
             }
         }
 
-        private void CreateWordDocument(Dictionary<string, List<Lid>> lijstPerPloeg)
+        private void CreateWordDocument(Dictionary<string, List<Lid>> lijstPerPloeg, Dictionary<string, List<Coach>> coachPerPloeg)
         {
             var doc = new Document();
+            doc.ShowSpellingErrors = false;
             var first = true;
             doc.PageSetup.Orientation = WdOrientation.wdOrientLandscape;
             foreach (var ploeg in lijstPerPloeg.Keys.OrderBy(x => x))
@@ -196,6 +241,29 @@ namespace SchutbladenVergunningen
                 par.Range.Text =
                     $"Nr\tLicentienummer\tNaam\tGeboortejaar\tEmail\tTelefoonnummers\n";
                 var count = 0;
+                // eerst coaches
+                if (coachPerPloeg.ContainsKey(ploeg))
+                { foreach (var coach in coachPerPloeg[ploeg]
+                    .OrderBy(x => x.Naam)
+                    .ThenBy(x => x.Licentie))
+                {
+                    textBox1.AppendText(
+                        $"  COACH : {coach.Licentie} - {coach.Naam} - {coach.Email} - {coach.Telefoonnummers}\n");
+                    par = doc.Paragraphs.Add();
+                    par.set_Style(WdBuiltinStyle.wdStyleNormal);
+
+                    par.Range.Text =
+                        $"COACH-BEGELEIDING\t{coach.Licentie}\t{coach.Naam}\t\t{coach.Email}\t{coach.Telefoonnummers}\n";
+                    count++;
+                    }
+
+                par = doc.Paragraphs.Add();
+                par.set_Style(WdBuiltinStyle.wdStyleNormal);
+
+                par.Range.Text =$"\t\t\t\t\t\n";
+                }
+
+                // nu leden
                 foreach (var lid in lijstPerPloeg[ploeg]
                     .OrderBy(x => x.RugNummer)
                     .ThenBy(x => x.Naam))
